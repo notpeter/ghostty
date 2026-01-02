@@ -1373,7 +1373,7 @@ link: RepeatableLink = .{},
 ///
 /// The redaction is visual only. The underlying text remains in the terminal
 /// buffer and will be included when copying text or using screen readers.
-@"redact-pattern": RepeatableRedact = .{},
+@"redact-pattern": RepeatableString = .{},
 
 /// The character used to replace redacted text. Defaults to U+2588 (█),
 /// the full block character. Common alternatives include:
@@ -8036,65 +8036,6 @@ pub const RepeatableLink = struct {
         // This currently can't be set so we don't format anything.
         _ = self;
         _ = formatter;
-    }
-};
-
-/// See "redact-pattern" for documentation.
-pub const RepeatableRedact = struct {
-    const Self = @This();
-
-    patterns: std.ArrayListUnmanaged(inputpkg.Redact) = .{},
-
-    pub fn parseCLI(self: *Self, alloc: Allocator, input_: ?[]const u8) !void {
-        const input = input_ orelse return error.ValueRequired;
-
-        // Empty value resets the list
-        if (input.len == 0) {
-            self.patterns.clearRetainingCapacity();
-            return;
-        }
-
-        const regex_copy = try alloc.dupe(u8, input);
-        try self.patterns.append(alloc, .{ .regex = regex_copy });
-    }
-
-    /// Deep copy of the struct. Required by Config.
-    pub fn clone(
-        self: *const Self,
-        alloc: Allocator,
-    ) Allocator.Error!Self {
-        var list = try std.ArrayListUnmanaged(inputpkg.Redact).initCapacity(
-            alloc,
-            self.patterns.items.len,
-        );
-        for (self.patterns.items) |item| {
-            const copy = try item.clone(alloc);
-            list.appendAssumeCapacity(copy);
-        }
-
-        return .{ .patterns = list };
-    }
-
-    /// Compare if two of our value are equal. Required by Config.
-    pub fn equal(self: Self, other: Self) bool {
-        const itemsA = self.patterns.items;
-        const itemsB = other.patterns.items;
-        if (itemsA.len != itemsB.len) return false;
-        for (itemsA, itemsB) |*a, *b| {
-            if (!a.equal(b)) return false;
-        } else return true;
-    }
-
-    /// Used by Formatter
-    pub fn formatEntry(self: Self, formatter: formatterpkg.EntryFormatter) !void {
-        if (self.patterns.items.len == 0) {
-            try formatter.formatEntry(void, {});
-            return;
-        }
-
-        for (self.patterns.items) |pattern| {
-            try formatter.formatEntry([]const u8, pattern.regex);
-        }
     }
 };
 

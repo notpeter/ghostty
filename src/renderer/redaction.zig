@@ -2,7 +2,6 @@ const std = @import("std");
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const oni = @import("oniguruma");
-const inputpkg = @import("../input.zig");
 const terminal = @import("../terminal/main.zig");
 const point = terminal.point;
 const Screen = terminal.Screen;
@@ -25,16 +24,22 @@ pub const Pattern = struct {
 pub const Set = struct {
     patterns: []Pattern,
 
-    /// Creates a Set from configuration redaction patterns.
+    /// Creates a Set from configuration regex pattern strings.
     pub fn fromConfig(
         alloc: Allocator,
-        config: []const inputpkg.Redact,
+        config: []const [:0]const u8,
     ) !Set {
         var patterns: std.ArrayList(Pattern) = .empty;
         defer patterns.deinit(alloc);
 
-        for (config) |redact| {
-            var regex = redact.oniRegex() catch |err| {
+        for (config) |pattern_str| {
+            var regex = oni.Regex.init(
+                pattern_str,
+                .{},
+                oni.Encoding.utf8,
+                oni.Syntax.default,
+                null,
+            ) catch |err| {
                 log.warn("failed to compile redaction regex: {}", .{err});
                 continue;
             };
@@ -147,7 +152,7 @@ test "renderCellMap - GitHub token prefix visible" {
 
     // Pattern: ghp_ visible, capture group redacted
     var set = try Set.fromConfig(alloc, &.{
-        .{ .regex = "ghp_([A-Za-z0-9]+)" },
+        "ghp_([A-Za-z0-9]+)",
     });
     defer set.deinit(alloc);
 
@@ -186,7 +191,7 @@ test "renderCellMap - Bearer token" {
     try state.update(alloc, &t);
 
     var set = try Set.fromConfig(alloc, &.{
-        .{ .regex = "Bearer ([A-Za-z0-9]+)" },
+        "Bearer ([A-Za-z0-9]+)",
     });
     defer set.deinit(alloc);
 
@@ -224,7 +229,7 @@ test "renderCellMap - no capture groups means no redaction" {
 
     // Pattern WITHOUT capture groups - nothing should be redacted
     var set = try Set.fromConfig(alloc, &.{
-        .{ .regex = "ghp_[A-Za-z0-9]+" },
+        "ghp_[A-Za-z0-9]+",
     });
     defer set.deinit(alloc);
 
@@ -258,7 +263,7 @@ test "renderCellMap - multiple capture groups" {
 
     // Two capture groups: user and password
     var set = try Set.fromConfig(alloc, &.{
-        .{ .regex = "https://([^:]+):([^@]+)@" },
+        "https://([^:]+):([^@]+)@",
     });
     defer set.deinit(alloc);
 
@@ -306,7 +311,7 @@ test "renderCellMap - URL without credentials not affected" {
 
     // Pattern for git credentials - should not match plain URLs
     var set = try Set.fromConfig(alloc, &.{
-        .{ .regex = "https://([^@]+)@github\\.com" },
+        "https://([^@]+)@github\\.com",
     });
     defer set.deinit(alloc);
 
@@ -339,7 +344,7 @@ test "renderCellMap - multiple matches in text" {
     try state.update(alloc, &t);
 
     var set = try Set.fromConfig(alloc, &.{
-        .{ .regex = "ghp_([a-z]+)" },
+        "ghp_([a-z]+)",
     });
     defer set.deinit(alloc);
 

@@ -606,7 +606,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 // Our redaction configs
                 const redactions = try redaction.Set.fromConfig(
                     alloc,
-                    config.@"redact-pattern".patterns.items,
+                    config.@"redact-pattern".list.items,
                 );
 
                 return .{
