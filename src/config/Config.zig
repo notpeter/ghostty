@@ -1346,6 +1346,34 @@ link: RepeatableLink = .{},
 /// Available since: 1.2.0
 @"link-previews": LinkPreviews = .true,
 
+/// Regular expression patterns for redacting text from the terminal display.
+///
+/// Any text matching these patterns will be visually replaced with a redaction
+/// indicator (e.g., "████") in the terminal display. This is useful for hiding
+/// sensitive information like API keys, passwords, or other secrets that might
+/// appear in terminal output.
+///
+/// The patterns use the Oniguruma regular expression syntax. This configuration
+/// can be repeated multiple times to specify multiple patterns.
+///
+/// Example patterns:
+///
+///     redact-pattern = (ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}
+///     redact-pattern = sk-[A-Za-z0-9]{48}
+///     redact-pattern = AKIA[0-9A-Z]{16}
+///
+/// These would redact GitHub tokens, OpenAI API keys, and AWS access key IDs
+/// respectively.
+///
+/// To reset the list and specify new patterns, use an empty string:
+///
+///     redact-pattern = ""
+///     redact-pattern = my-new-pattern
+///
+/// Note: The redaction is purely visual. The actual text content remains in
+/// the terminal buffer and will be included when copying text.
+@"redact-pattern": RepeatableString = .{},
+
 /// Whether to start the window in a maximized state. This setting applies
 /// to new windows and does not apply to tabs, splits, etc. However, this setting
 /// will apply to all new windows, not just the first one.
