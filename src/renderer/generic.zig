@@ -2509,6 +2509,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 state.rows,
                 self.cells.size.rows,
             );
+            const has_redactions = redactions.count() > 0;
             for (
                 0..,
                 row_raws[0..row_len],
@@ -2934,7 +2935,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                             shaper_cells_i += 1;
                         }) {
                             // Render replacement character for redacted cells
-                            if (redactions.contains(.{
+                            if (has_redactions and redactions.contains(.{
                                 .x = @intCast(x),
                                 .y = @intCast(y),
                             })) {
