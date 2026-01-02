@@ -564,6 +564,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             bg_image_repeat: bool,
             links: link.Set,
             redactions: redaction.Set,
+            redact_replacement: u21,
             vsync: bool,
             colorspace: configpkg.Config.WindowColorspace,
             blending: configpkg.Config.AlphaBlending,
@@ -644,6 +645,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     .bg_image_repeat = config.@"background-image-repeat",
                     .links = links,
                     .redactions = redactions,
+                    .redact_replacement = config.@"redact-replacement",
                     .vsync = config.@"window-vsync",
                     .colorspace = config.@"window-colorspace",
                     .blending = config.@"alpha-blending",
@@ -2931,12 +2933,24 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                             run.offset + shaped_cells[shaper_cells_i].x == x) : ({
                             shaper_cells_i += 1;
                         }) {
-                            // Skip rendering glyphs for redacted cells - they will
-                            // appear as blank/background to hide sensitive content
+                            // Render replacement character for redacted cells
                             if (redactions.contains(.{
                                 .x = @intCast(x),
                                 .y = @intCast(y),
-                            })) continue;
+                            })) {
+                                self.addRedactionGlyph(
+                                    @intCast(x),
+                                    @intCast(y),
+                                    fg,
+                                    alpha,
+                                ) catch |err| {
+                                    log.warn(
+                                        "error adding redaction glyph x={} y={}, err={}",
+                                        .{ x, y, err },
+                                    );
+                                };
+                                continue;
+                            }
 
                             self.addGlyph(
                                 @intCast(x),
@@ -3299,6 +3313,47 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 .bearings = .{
                     @intCast(render.glyph.offset_x + shaper_cell.x_offset),
                     @intCast(render.glyph.offset_y + shaper_cell.y_offset),
+                },
+            });
+        }
+
+        /// Add a redaction replacement glyph at the specified position.
+        fn addRedactionGlyph(
+            self: *Self,
+            x: terminal.size.CellCountInt,
+            y: terminal.size.CellCountInt,
+            color: terminal.color.RGB,
+            alpha: u8,
+        ) !void {
+            const render_ = self.font_grid.renderCodepoint(
+                self.alloc,
+                self.config.redact_replacement,
+                .regular,
+                .text,
+                .{ .grid_metrics = self.grid_metrics },
+            ) catch |err| {
+                log.warn("error rendering redaction glyph err={}", .{err});
+                return;
+            };
+            const render = render_ orelse {
+                log.warn("failed to find font for redaction codepoint={X}", .{self.config.redact_replacement});
+                return;
+            };
+
+            // If the glyph is 0 width or height, it will be invisible
+            if (render.glyph.width == 0 or render.glyph.height == 0) {
+                return;
+            }
+
+            try self.cells.add(self.alloc, .text, .{
+                .atlas = .grayscale,
+                .grid_pos = .{ @intCast(x), @intCast(y) },
+                .color = .{ color.r, color.g, color.b, alpha },
+                .glyph_pos = .{ render.glyph.atlas_x, render.glyph.atlas_y },
+                .glyph_size = .{ render.glyph.width, render.glyph.height },
+                .bearings = .{
+                    @intCast(render.glyph.offset_x),
+                    @intCast(render.glyph.offset_y),
                 },
             });
         }

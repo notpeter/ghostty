@@ -1375,6 +1375,17 @@ link: RepeatableLink = .{},
 /// buffer and will be included when copying text or using screen readers.
 @"redact-pattern": RepeatableRedact = .{},
 
+/// The character used to replace redacted text. Defaults to U+2588 (█),
+/// the full block character. Common alternatives include:
+///
+///   * `*` - asterisk
+///   * `•` - bullet (U+2022)
+///   * `●` - black circle (U+25CF)
+///   * `▒` - medium shade (U+2592)
+///
+/// Set to a space to make redacted text invisible.
+@"redact-replacement": u21 = '█',
+
 /// Whether to start the window in a maximized state. This setting applies
 /// to new windows and does not apply to tabs, splits, etc. However, this setting
 /// will apply to all new windows, not just the first one.
