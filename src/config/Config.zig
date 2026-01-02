@@ -1348,31 +1348,32 @@ link: RepeatableLink = .{},
 
 /// Regular expression patterns for redacting text from the terminal display.
 ///
-/// Any text matching these patterns will be visually replaced with a redaction
-/// indicator (e.g., "████") in the terminal display. This is useful for hiding
-/// sensitive information like API keys, passwords, or other secrets that might
-/// appear in terminal output.
+/// Only text within capture groups is redacted; non-captured portions remain
+/// visible. This allows patterns to match context while only hiding sensitive
+/// parts. Uses Oniguruma regex syntax. Can be repeated for multiple patterns.
 ///
-/// The patterns use the Oniguruma regular expression syntax. This configuration
-/// can be repeated multiple times to specify multiple patterns.
+/// Examples:
 ///
-/// Example patterns:
+///     # GitHub token: shows "ghp_", redacts the secret
+///     redact-pattern = ghp_([A-Za-z0-9_]+)
 ///
-///     redact-pattern = (ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}
-///     redact-pattern = sk-[A-Za-z0-9]{48}
-///     redact-pattern = AKIA[0-9A-Z]{16}
+///     # Bearer token: shows "Bearer ", redacts the token
+///     redact-pattern = Bearer ([A-Za-z0-9\-_.~+/]+=*)
 ///
-/// These would redact GitHub tokens, OpenAI API keys, and AWS access key IDs
-/// respectively.
+///     # AWS key: shows "AKIA", redacts the rest
+///     redact-pattern = AKIA([A-Z0-9]{16})
 ///
-/// To reset the list and specify new patterns, use an empty string:
+///     # Git URL: shows structure, redacts user:pass
+///     redact-pattern = https://([^@]+)@github\.com
 ///
-///     redact-pattern = ""
+/// To reset the list, use an empty value before setting new patterns:
+///
+///     redact-pattern =
 ///     redact-pattern = my-new-pattern
 ///
-/// Note: The redaction is purely visual. The actual text content remains in
-/// the terminal buffer and will be included when copying text.
-@"redact-pattern": RepeatableString = .{},
+/// The redaction is visual only. The underlying text remains in the terminal
+/// buffer and will be included when copying text or using screen readers.
+@"redact-pattern": RepeatableRedact = .{},
 
 /// Whether to start the window in a maximized state. This setting applies
 /// to new windows and does not apply to tabs, splits, etc. However, this setting
@@ -8024,6 +8025,93 @@ pub const RepeatableLink = struct {
         // This currently can't be set so we don't format anything.
         _ = self;
         _ = formatter;
+    }
+};
+
+/// See "redact-pattern" for documentation.
+pub const RepeatableRedact = struct {
+    const Self = @This();
+
+    patterns: std.ArrayListUnmanaged(inputpkg.Redact) = .{},
+
+    pub fn parseCLI(self: *Self, alloc: Allocator, input_: ?[]const u8) !void {
+        const input = input_ orelse return error.ValueRequired;
+
+        // Empty value resets the list
+        if (input.len == 0) {
+            self.patterns.clearRetainingCapacity();
+            return;
+        }
+
+        const regex_copy = try alloc.dupe(u8, input);
+        try self.patterns.append(alloc, .{ .regex = regex_copy });
+    }
+
+    /// Deep copy of the struct. Required by Config.
+    pub fn clone(
+        self: *const Self,
+        alloc: Allocator,
+    ) Allocator.Error!Self {
+        var list = try std.ArrayListUnmanaged(inputpkg.Redact).initCapacity(
+            alloc,
+            self.patterns.items.len,
+        );
+        for (self.patterns.items) |item| {
+            const copy = try item.clone(alloc);
+            list.appendAssumeCapacity(copy);
+        }
+
+        return .{ .patterns = list };
+    }
+
+    /// Compare if two of our values are equal. Required by Config.
+    pub fn equal(self: Self, other: Self) bool {
+        const itemsA = self.patterns.items;
+        const itemsB = other.patterns.items;
+        if (itemsA.len != itemsB.len) return false;
+        for (itemsA, itemsB) |*a, *b| {
+            if (!a.equal(b)) return false;
+        } else return true;
+    }
+
+    /// Used by Formatter
+    pub fn formatEntry(self: Self, formatter: formatterpkg.EntryFormatter) !void {
+        if (self.patterns.items.len == 0) {
+            try formatter.formatEntry(void, {});
+            return;
+        }
+
+        for (self.patterns.items) |pattern| {
+            try formatter.formatEntry([]const u8, pattern.regex);
+        }
+    }
+
+    test "parseCLI" {
+        const testing = std.testing;
+        var arena = ArenaAllocator.init(testing.allocator);
+        defer arena.deinit();
+        const alloc = arena.allocator();
+
+        var list: Self = .{};
+        try list.parseCLI(alloc, "ghp_([A-Za-z0-9]+)");
+        try list.parseCLI(alloc, "Bearer ([A-Za-z0-9]+)");
+        try testing.expectEqual(@as(usize, 2), list.patterns.items.len);
+
+        try list.parseCLI(alloc, "");
+        try testing.expectEqual(@as(usize, 0), list.patterns.items.len);
+    }
+
+    test "clone and equal" {
+        const testing = std.testing;
+        var arena = ArenaAllocator.init(testing.allocator);
+        defer arena.deinit();
+        const alloc = arena.allocator();
+
+        var list: Self = .{};
+        try list.parseCLI(alloc, "test_([a-z]+)");
+
+        const cloned = try list.clone(alloc);
+        try testing.expect(list.equal(cloned));
     }
 };
 

@@ -12,6 +12,7 @@ const renderer = @import("../renderer.zig");
 const math = @import("../math.zig");
 const Surface = @import("../Surface.zig");
 const link = @import("link.zig");
+const redaction = @import("redaction.zig");
 const cellpkg = @import("cell.zig");
 const noMinContrast = cellpkg.noMinContrast;
 const constraintWidth = cellpkg.constraintWidth;
@@ -562,6 +563,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             bg_image_fit: configpkg.BackgroundImageFit,
             bg_image_repeat: bool,
             links: link.Set,
+            redactions: redaction.Set,
             vsync: bool,
             colorspace: configpkg.Config.WindowColorspace,
             blending: configpkg.Config.AlphaBlending,
@@ -600,6 +602,12 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     config.link.links.items,
                 );
 
+                // Our redaction configs
+                const redactions = try redaction.Set.fromConfig(
+                    alloc,
+                    config.@"redact-pattern".patterns.items,
+                );
+
                 return .{
                     .background_opacity = @max(0, @min(1, config.@"background-opacity")),
                     .background_opacity_cells = config.@"background-opacity-cells",
@@ -635,6 +643,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     .bg_image_fit = config.@"background-image-fit",
                     .bg_image_repeat = config.@"background-image-repeat",
                     .links = links,
+                    .redactions = redactions,
                     .vsync = config.@"window-vsync",
                     .colorspace = config.@"window-colorspace",
                     .blending = config.@"alpha-blending",
@@ -646,6 +655,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             pub fn deinit(self: *DerivedConfig) void {
                 const alloc = self.arena.allocator();
                 self.links.deinit(alloc);
+                self.redactions.deinit(alloc);
                 self.arena.deinit();
             }
         };
@@ -1229,6 +1239,16 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 log.warn("error searching for regex links err={}", .{err});
             };
 
+            // Compute redaction cell map for capture group redaction
+            var redactions: terminal.RenderState.CellSet = .empty;
+            self.config.redactions.renderCellMap(
+                arena_alloc,
+                &redactions,
+                &self.terminal_state,
+            ) catch |err| {
+                log.warn("error searching for redaction patterns err={}", .{err});
+            };
+
             // Clear our highlight state and update.
             if (self.search_matches_dirty or self.terminal_state.dirty != .false) {
                 self.search_matches_dirty = false;
@@ -1285,6 +1305,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     .blink_visible = cursor_blink_visible,
                 }),
                 &critical.links,
+                &redactions,
             );
 
             // Notify our shaper we're done for the frame. For some shapers,
@@ -2393,6 +2414,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             preedit: ?renderer.State.Preedit,
             cursor_style_: ?renderer.CursorStyle,
             links: *const terminal.RenderState.CellSet,
+            redactions: *const terminal.RenderState.CellSet,
         ) !void {
             const state: *terminal.RenderState = &self.terminal_state;
             defer state.dirty = .false;
@@ -2909,6 +2931,13 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                             run.offset + shaped_cells[shaper_cells_i].x == x) : ({
                             shaper_cells_i += 1;
                         }) {
+                            // Skip rendering glyphs for redacted cells - they will
+                            // appear as blank/background to hide sensitive content
+                            if (redactions.contains(.{
+                                .x = @intCast(x),
+                                .y = @intCast(y),
+                            })) continue;
+
                             self.addGlyph(
                                 @intCast(x),
                                 @intCast(y),

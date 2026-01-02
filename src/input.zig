@@ -18,6 +18,7 @@ pub const Action = key.Action;
 pub const Binding = @import("input/Binding.zig");
 pub const Command = command.Command;
 pub const Link = @import("input/Link.zig");
+pub const Redact = @import("input/Redact.zig");
 pub const Key = key.Key;
 pub const KeyboardLayout = keyboard.Layout;
 pub const KeyEvent = key.KeyEvent;
