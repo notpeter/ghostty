@@ -8075,7 +8075,7 @@ pub const RepeatableRedact = struct {
         return .{ .patterns = list };
     }
 
-    /// Compare if two of our values are equal. Required by Config.
+    /// Compare if two of our value are equal. Required by Config.
     pub fn equal(self: Self, other: Self) bool {
         const itemsA = self.patterns.items;
         const itemsB = other.patterns.items;
