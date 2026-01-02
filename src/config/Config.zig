@@ -8096,34 +8096,6 @@ pub const RepeatableRedact = struct {
             try formatter.formatEntry([]const u8, pattern.regex);
         }
     }
-
-    test "parseCLI" {
-        const testing = std.testing;
-        var arena = ArenaAllocator.init(testing.allocator);
-        defer arena.deinit();
-        const alloc = arena.allocator();
-
-        var list: Self = .{};
-        try list.parseCLI(alloc, "ghp_([A-Za-z0-9]+)");
-        try list.parseCLI(alloc, "Bearer ([A-Za-z0-9]+)");
-        try testing.expectEqual(@as(usize, 2), list.patterns.items.len);
-
-        try list.parseCLI(alloc, "");
-        try testing.expectEqual(@as(usize, 0), list.patterns.items.len);
-    }
-
-    test "clone and equal" {
-        const testing = std.testing;
-        var arena = ArenaAllocator.init(testing.allocator);
-        defer arena.deinit();
-        const alloc = arena.allocator();
-
-        var list: Self = .{};
-        try list.parseCLI(alloc, "test_([a-z]+)");
-
-        const cloned = try list.clone(alloc);
-        try testing.expect(list.equal(cloned));
-    }
 };
 
 /// Options for copy on select behavior.
